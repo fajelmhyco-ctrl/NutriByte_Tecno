@@ -1,0 +1,21 @@
+{
+  "name": "nutribyte-philippines",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Tele-nutrition marketplace and localized mHealth platform for Filipino cuisine",
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "apps/mobile"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @nutribyte/api",
+    "dev:web": "npm run dev -w @nutribyte/web",
+    "dev:mobile": "npm run start -w @nutribyte/mobile",
+    "test": "npm run test -w @nutribyte/api",
+    "typecheck": "npm run typecheck -w @nutribyte/api && npm run typecheck -w @nutribyte/web"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

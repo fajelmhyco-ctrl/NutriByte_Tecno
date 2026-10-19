@@ -1,0 +1,358 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  consumer
+  patient
+  dietitian
+  admin
+}
+
+enum UserTier {
+  free
+  premium
+}
+
+enum Sex {
+  male
+  female
+  other
+}
+
+enum ActivityLevel {
+  sedentary
+  light
+  moderate
+  active
+  very_active
+}
+
+enum MealType {
+  breakfast
+  lunch
+  dinner
+  snack
+}
+
+enum LinkStatus {
+  active
+  pending
+  revoked
+}
+
+enum SessionStatus {
+  scheduled
+  in_progress
+  completed
+  cancelled
+  no_show
+}
+
+enum PaymentStatus {
+  unpaid
+  pending
+  paid
+  refunded
+  failed
+}
+
+enum AlertSeverity {
+  info
+  warning
+  critical
+}
+
+enum AlertKind {
+  sodium_exceeded
+  sodium_enhancer_detected
+  potassium_exceeded
+  phosphorus_exceeded
+  protein_exceeded
+  glycemic_load_exceeded
+  calorie_target_exceeded
+}
+
+enum SubscriptionStatus {
+  active
+  past_due
+  cancelled
+  expired
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  fullName     String   @map("full_name")
+  role         UserRole @default(consumer)
+  tier         UserTier @default(free)
+  isVerified   Boolean  @default(false) @map("is_verified")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  profile            UserProfile?
+  clinicalFlags      ClinicalFlags?
+  mealLogs           DailyMealLog[]
+  dietitianProfile   DietitianProfile?
+  patientLinks       PatientDietitianLink[] @relation("PatientLinks")
+  dietitianLinks     PatientDietitianLink[] @relation("DietitianLinks")
+  patientSessions    TelehealthSession[]    @relation("PatientSessions")
+  dietitianSessions  TelehealthSession[]    @relation("DietitianSessions")
+  aiConversations    AiCoachConversation[]
+  alerts             ClinicalAlert[]
+  subscriptions      Subscription[]
+  refreshTokens      RefreshToken[]
+  createdFoods       FilipinoFood[]        @relation("FoodCreator")
+  weightLogs         WeightLog[]
+
+  @@index([role])
+  @@map("users")
+}
+
+model UserProfile {
+  id             String        @id @default(uuid()) @db.Uuid
+  userId         String        @unique @map("user_id") @db.Uuid
+  age            Int
+  sex            Sex
+  heightCm       Float         @map("height_cm")
+  weightKg       Float         @map("weight_kg")
+  targetWeightKg Float?        @map("target_weight_kg")
+  activityLevel  ActivityLevel @default(moderate) @map("activity_level")
+  bmi            Float
+  allergies      String[]      @default([])
+  preferences    String[]      @default([])
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model ClinicalFlags {
+  id                 String   @id @default(uuid()) @db.Uuid
+  userId             String   @unique @map("user_id") @db.Uuid
+  hasDiabetes        Boolean  @default(false) @map("has_diabetes")
+  hasHypertension    Boolean  @default(false) @map("has_hypertension")
+  ckdStage           Int      @default(0) @map("ckd_stage")
+  isDialysis         Boolean  @default(false) @map("is_dialysis")
+  targetSodiumMg     Int      @default(2300) @map("target_sodium_mg")
+  targetPotassiumMg  Int      @default(3500) @map("target_potassium_mg")
+  targetProteinG     Float    @default(60) @map("target_protein_g")
+  targetGlycemicLoad Float    @default(100) @map("target_glycemic_load")
+  targetCalories     Int      @default(2000) @map("target_calories")
+  targetPhosphorusMg Int      @default(700) @map("target_phosphorus_mg")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("clinical_flags")
+}
+
+model FilipinoFood {
+  id               String   @id @default(uuid()) @db.Uuid
+  dishName         String   @map("dish_name")
+  localName        String?  @map("local_name")
+  category         String
+  servingUnit      String   @map("serving_unit")
+  servingGrams     Float    @default(100) @map("serving_grams")
+  calories         Float
+  proteinG         Float    @map("protein_g")
+  carbsG           Float    @map("carbs_g")
+  fatG             Float    @map("fat_g")
+  fiberG           Float    @default(0) @map("fiber_g")
+  sodiumMg         Float    @map("sodium_mg")
+  potassiumMg      Float    @map("potassium_mg")
+  phosphorusMg     Float    @map("phosphorus_mg")
+  glycemicIndex    Int?     @map("glycemic_index")
+  glycemicLoad     Float?   @map("glycemic_load")
+  isVerified       Boolean  @default(false) @map("is_verified")
+  isLocal          Boolean  @default(true) @map("is_local")
+  commonIngredients Json    @default("[]") @map("common_ingredients")
+  preparationTips  String?  @map("preparation_tips")
+  createdById      String?  @map("created_by_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  createdBy User?            @relation("FoodCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  mealLogs  DailyMealLog[]
+
+  @@index([dishName])
+  @@index([category])
+  @@index([isVerified])
+  @@map("filipino_food_database")
+}
+
+model DailyMealLog {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  foodId            String   @map("food_id") @db.Uuid
+  portionMultiplier Float    @default(1) @map("portion_multiplier")
+  loggedAt          DateTime @default(now()) @map("logged_at")
+  mealType          MealType @map("meal_type")
+  totalCalories     Float    @map("total_calories")
+  totalProteinG     Float    @default(0) @map("total_protein_g")
+  totalCarbsG       Float    @default(0) @map("total_carbs_g")
+  totalFatG         Float    @default(0) @map("total_fat_g")
+  totalSodiumMg     Float    @map("total_sodium_mg")
+  totalPotassiumMg  Float    @map("total_potassium_mg")
+  totalPhosphorusMg Float    @default(0) @map("total_phosphorus_mg")
+  totalGlycemicLoad Float    @default(0) @map("total_glycemic_load")
+  notes             String?
+  clientUuid        String?  @unique @map("client_uuid")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  food FilipinoFood @relation(fields: [foodId], references: [id], onDelete: Restrict)
+  alerts ClinicalAlert[]
+
+  @@index([userId, loggedAt])
+  @@map("daily_meal_logs")
+}
+
+model DietitianProfile {
+  id                  String   @id @default(uuid()) @db.Uuid
+  userId              String   @unique @map("user_id") @db.Uuid
+  prcLicenseNumber    String   @unique @map("prc_license_number")
+  specialization      String
+  bio                 String?
+  consultationFeePhp  Float    @map("consultation_fee_php")
+  rating              Float    @default(0)
+  ratingCount         Int      @default(0) @map("rating_count")
+  isAcceptingPatients Boolean  @default(true) @map("is_accepting_patients")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("dietitian_profiles")
+}
+
+model PatientDietitianLink {
+  id          String     @id @default(uuid()) @db.Uuid
+  patientId   String     @map("patient_id") @db.Uuid
+  dietitianId String     @map("dietitian_id") @db.Uuid
+  accessToken String     @unique @map("access_token")
+  status      LinkStatus @default(pending)
+  linkedAt    DateTime?  @map("linked_at")
+  revokedAt   DateTime?  @map("revoked_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  patient   User @relation("PatientLinks", fields: [patientId], references: [id], onDelete: Cascade)
+  dietitian User @relation("DietitianLinks", fields: [dietitianId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, dietitianId])
+  @@index([dietitianId, status])
+  @@map("patient_dietitian_links")
+}
+
+model TelehealthSession {
+  id                     String        @id @default(uuid()) @db.Uuid
+  patientId              String        @map("patient_id") @db.Uuid
+  dietitianId            String        @map("dietitian_id") @db.Uuid
+  scheduledAt            DateTime      @map("scheduled_at")
+  durationMinutes        Int           @default(30) @map("duration_minutes")
+  status                 SessionStatus @default(scheduled)
+  roomId                 String        @unique @map("room_id")
+  paymentStatus          PaymentStatus @default(unpaid) @map("payment_status")
+  amountPhp              Float         @map("amount_php")
+  platformCommissionPhp  Float         @map("platform_commission_php")
+  dietitianPayoutPhp     Float         @map("dietitian_payout_php")
+  paymongoPaymentId      String?       @map("paymongo_payment_id")
+  notes                  String?
+  createdAt              DateTime      @default(now()) @map("created_at")
+  updatedAt              DateTime      @updatedAt @map("updated_at")
+
+  patient   User @relation("PatientSessions", fields: [patientId], references: [id], onDelete: Cascade)
+  dietitian User @relation("DietitianSessions", fields: [dietitianId], references: [id], onDelete: Restrict)
+
+  @@index([patientId, scheduledAt])
+  @@index([dietitianId, scheduledAt])
+  @@map("telehealth_sessions")
+}
+
+model AiCoachConversation {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  mealLogId        String?  @map("meal_log_id") @db.Uuid
+  prompt           String
+  aiResponse       String   @map("ai_response")
+  flaggedNutrients Json     @default("[]") @map("flagged_nutrients")
+  complianceStatus String?  @map("compliance_status")
+  tokensUsed       Int?     @map("tokens_used")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("ai_coach_conversations")
+}
+
+model ClinicalAlert {
+  id        String        @id @default(uuid()) @db.Uuid
+  userId    String        @map("user_id") @db.Uuid
+  mealLogId String?       @map("meal_log_id") @db.Uuid
+  kind      AlertKind
+  severity  AlertSeverity
+  title     String
+  message   String
+  metadata  Json          @default("{}")
+  isRead    Boolean       @default(false) @map("is_read")
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealLog DailyMealLog? @relation(fields: [mealLogId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead])
+  @@map("clinical_alerts")
+}
+
+model Subscription {
+  id             String             @id @default(uuid()) @db.Uuid
+  userId         String             @map("user_id") @db.Uuid
+  plan           String
+  status         SubscriptionStatus @default(active)
+  amountPhp      Float              @map("amount_php")
+  startsAt       DateTime           @map("starts_at")
+  endsAt         DateTime           @map("ends_at")
+  paymongoRef    String?            @map("paymongo_ref")
+  createdAt      DateTime           @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("subscriptions")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model WeightLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  weightKg  Float    @map("weight_kg")
+  loggedAt  DateTime @default(now()) @map("logged_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, loggedAt])
+  @@map("weight_logs")
+}
