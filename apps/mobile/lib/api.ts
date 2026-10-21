@@ -1,9 +1,68 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 
-export const API_URL =
-  (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
-  "http://localhost:4000";
+const DEV_API_PORT = 4000;
+const REQUEST_TIMEOUT_MS = 12_000;
+
+function devServerHost(): string | null {
+  const candidates = [Constants.expoConfig?.hostUri, Constants.expoGoConfig?.debuggerHost];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const host = candidate
+      .replace(/^[a-z]+:\/\//i, "")
+      .split("/")[0]
+      .split(":")[0]
+      .trim();
+    if (host) return host;
+  }
+  return null;
+}
+
+function isPrivateLanHost(host: string): boolean {
+  return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host);
+}
+
+function isLoopbackUrl(value: string): boolean {
+  try {
+    const { hostname } = new URL(value);
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
+function resolveApiUrl(): string {
+  // Expo Go on a physical device cannot reach the PC through "localhost".
+  // Set EXPO_PUBLIC_API_URL to your computer's LAN address to override detection.
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/+$/, "");
+
+  const configured = (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl?.trim();
+  if (configured && !isLoopbackUrl(configured)) return configured.replace(/\/+$/, "");
+
+  // In Expo Go, hostUri is the Metro address the phone used to load the app.
+  // Reuse that LAN IP so API requests go to the development machine, not the phone.
+  const host = devServerHost();
+  if (host && isPrivateLanHost(host)) {
+    return `http://${host}:${DEV_API_PORT}`;
+  }
+
+  return configured || `http://localhost:${DEV_API_PORT}`;
+}
+
+export const API_URL = resolveApiUrl();
+
+async function fetchWithTimeout(input: string, init: RequestInit = {}): Promise<Response> {
+  if (init.signal) return fetch(input, init);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const TOKEN_KEY = "nutribyte.accessToken";
 const REFRESH_KEY = "nutribyte.refreshToken";
@@ -26,7 +85,7 @@ export async function clearSession() {
 async function refreshSession(): Promise<boolean> {
   const refreshToken = await AsyncStorage.getItem(REFRESH_KEY);
   if (!refreshToken) return false;
-  const res = await fetch(`${API_URL}/api/auth/refresh`, {
+  const res = await fetchWithTimeout(`${API_URL}/api/auth/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refreshToken }),
@@ -50,7 +109,7 @@ export async function api<T>(
     if (token) headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const res = await fetchWithTimeout(`${API_URL}${path}`, { ...options, headers });
 
   if (res.status === 401 && retry && !options.skipAuth) {
     const ok = await refreshSession();

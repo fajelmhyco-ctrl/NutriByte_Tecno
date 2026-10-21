@@ -3,7 +3,7 @@
 Localized tele-nutrition marketplace and mHealth platform. Clinical nutrition logic is
 Filipino-food aware: adobo, sinigang, kare-kare, bagoong, patis, sayote, pechay, bangus,
 and 30+ other verified local dishes.
-
+6/21/2026
 ## Monorepo layout
 
 ```
@@ -65,8 +65,11 @@ npm run seed -w @nutribyte/api
 # 5. Run
 npm run dev:api      # http://localhost:4000
 npm run dev:web      # http://localhost:3000
-npm run dev:mobile   # Expo
+npm run dev:mobile   # Expo (SDK 57)
 ```
+
+For Expo Go setup (correct Expo Go 57 build, LAN/tunnel, and phone-to-API networking), see
+[`apps/mobile/README.md`](apps/mobile/README.md).
 
 ## Demo accounts
 

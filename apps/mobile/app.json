@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "scheme": "nutribyte",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "backgroundColor": "#15803d",
-      "resizeMode": "contain"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ph.nutribyte.app"
@@ -21,7 +16,11 @@
         "backgroundColor": "#15803d"
       }
     },
-    "plugins": ["expo-router", "expo-sqlite"],
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      ["expo-splash-screen", { "backgroundColor": "#15803d", "resizeMode": "contain" }]
+    ],
     "experiments": {
       "typedRoutes": true
     },
